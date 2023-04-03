@@ -13,11 +13,14 @@ repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v4.4.0
     hooks:
+      - id: check-toml
       - id: check-yaml
       - id: detect-private-key
       - id: end-of-file-fixer
         types_or: [python]
       - id: mixed-line-ending
+        args:
+          - --fix=lf
       - id: requirements-txt-fixer
       - id: trailing-whitespace
         args:
@@ -29,8 +32,7 @@ repos:
       - id: auto-walrus
 
   - repo: https://github.com/charliermarsh/ruff-pre-commit
-    # Ruff version.
-    rev: v0.0.256
+    rev: v0.0.259
     hooks:
       - id: ruff
 
@@ -47,31 +49,18 @@ repos:
           - tomli
 
   - repo: https://github.com/MarcoGorelli/cython-lint
-    rev: v0.13.0
+    rev: v0.14.0
     hooks:
     - id: cython-lint
 
   - repo: https://github.com/pre-commit/mirrors-mypy
-    rev: 'v1.1.1'
+    rev: v1.1.1
     hooks:
       - id: mypy  # See pyproject.toml for args
         additional_dependencies:
           - types-all
 
-  - repo: https://github.com/asottile/pyupgrade
-    rev: v3.3.1
-    hooks:
-      - id: pyupgrade
-        args:  # Solr on Cython is not yet ready for 3.10 type hints
-          - --py39-plus
-          - --keep-runtime-typing
-
   - repo: https://github.com/abravalheri/validate-pyproject
-    rev: v0.12.1
+    rev: v0.12.2
     hooks:
       - id: validate-pyproject
-
-  - repo: https://github.com/pycqa/flake8
-    rev: 6.0.0
-    hooks:
-      - id: flake8  # See the file .flake8 for args
