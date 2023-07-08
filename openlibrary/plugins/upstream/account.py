@@ -263,7 +263,7 @@ class account_create(delegate.page):
             or "openlibrary.plugins." + name in delegate.get_plugins()
         )
 
-    def POST(self):
+      def POST(self):
         f: forms.RegisterForm = self.get_form()
 
         if f.validates(web.input()):
@@ -279,8 +279,12 @@ class account_create(delegate.page):
                 "announcements checkbox" should map to BOTH `ml_best_of` and
                 `ml_updates`
                 """  # nopep8
-                mls = ['ml_best_of', 'ml_updates']
-                notifications = mls if f.ia_newsletter.checked else []
+                notifications = []
+                if f.ia_newsletter.checked:
+                    notifications.append('ml_best_of')
+                if f.ia_events_notifications.checked:
+                    notifications.append('ml_updates')
+
                 InternetArchiveAccount.create(
                     screenname=f.username.value,
                     email=f.email.value,
@@ -296,7 +300,6 @@ class account_create(delegate.page):
                 f.note = LOGIN_ERRORS['max_retries_exceeded']
 
         return render['account/create'](f)
-
 
 del delegate.pages['/account/register']
 
