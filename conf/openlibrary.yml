@@ -54,8 +54,6 @@ plugin_worksearch:
 
 http_request_timeout: 10
 
-stats_solr: solr:8983
-
 features:
     cache_most_recent: enabled
     dev: enabled
@@ -75,6 +73,7 @@ features:
     support: admin
     undo: enabled
     upstream: enabled
+    my_books_dropper: enabled
 
 upstream_to_www_migration: true
 default_template_root: /upstream

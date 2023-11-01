@@ -3,7 +3,7 @@
  * @module lists/index
  */
 
-import { createList, addToList, removeFromList, updateReadingLog, fetchPartials } from './ListService'
+import { createNewList, addToList, removeFromList, updateReadingLog, fetchPartials } from './ListService'
 import { websafe } from '../jsdef'
 import { CheckInEvent } from '../check-ins'
 
@@ -38,7 +38,7 @@ const ReadingLog = {
  *
  * @param {HTMLCollection} droppers Collection of reading log droppers.
  */
-export function initDroppers(droppers) {
+export function initReadingLogDroppers(droppers) {
     for (const dropper of droppers) {
         const anchors = dropper.querySelectorAll('.add-to-list');
         initAddToListAnchors(anchors, dropper)
@@ -59,7 +59,10 @@ export function initDroppers(droppers) {
             addReadingLogButtonClickListener(button)
         }
 
-        syncReadingLogDropdownRemoveWithPrimaryButton(dropper)
+        const readingLogForm = dropper.querySelector('.readingLog')
+        if (readingLogForm) {
+            syncReadingLogDropdownRemoveWithPrimaryButton(dropper, readingLogForm)
+        }
     }
 }
 
@@ -129,24 +132,11 @@ function addListClickListener(elem, parentDropper) {
                     actionableItems[listKey] = [li]
                 }
             }
-
-            // close dropper
-            toggleDropper(parentDropper)
         }
 
         addToList(listKey, seed, successCallback)
 
     })
-}
-
-/**
- * Toggles given dropper's expanded state.
- *
- * @param {HTMLDivElement} dropper A reading log button reference.
- */
-function toggleDropper(dropper) {
-    $(dropper).find('.dropdown').first().slideToggle(25);
-    $(dropper).find('.arrow').first().toggleClass('up');
 }
 
 /**
@@ -206,7 +196,7 @@ function addCreateListClickListener(button, parentDropper) {
             const data = {
                 name: websafe(nameField.value),
                 description: websafe(descriptionField.value),
-                seeds: [seed],
+                seeds: seed ? [seed] : seed
             }
 
             const successCallback = function(listKey, listTitle) {
@@ -216,7 +206,7 @@ function addCreateListClickListener(button, parentDropper) {
                 actionableItems[listKey] = [li]
             }
 
-            createList(hiddenUserInput.value, data, successCallback)
+            createNewList(hiddenUserInput.value, data, successCallback)
 
             // Close colorbox
             $.colorbox.close()
@@ -240,18 +230,25 @@ export function clearCreateListForm() {
  *
  * This sets up the 'Remove From Shelf' button to behave as if it were the
  * primaryButton in terms of removal from a shelf.
+ * @param {HTMLDivElement} A div containing the dropper widget
+ * @param {HTMLFormElement} The form with the .readingLog selector.
  */
-export function syncReadingLogDropdownRemoveWithPrimaryButton(dropper) {
-    const primaryForm = dropper.querySelector('.readingLog')
-    const shelfToRemoveFrom = primaryForm.querySelector('[name=bookshelf_id]').value
+export function syncReadingLogDropdownRemoveWithPrimaryButton(dropper, readingLogForm) {
+    if (!readingLogForm) {
+        return;
+    }
+    const shelfToRemoveFrom = readingLogForm.querySelector('[name=bookshelf_id]').value
     const removalForm = dropper.querySelector('#remove-from-list')
+    if (!removalForm) {
+        return;
+    }
     const removalButton = removalForm.querySelector('button')
 
     // Get the remval bookshelf_id from primaryButton.
     removalForm.querySelector('[name=bookshelf_id]').value = shelfToRemoveFrom
 
     // The remove-from-shelf button displays only if a book is already on a bookshelf.
-    if (primaryForm.querySelector('[name=action]').value === 'remove') {
+    if (readingLogForm.querySelector('[name=action]').value === 'remove') {
         removalButton.classList.remove('hidden')
     } else {
         removalButton.classList.add('hidden')
@@ -266,9 +263,8 @@ export function syncReadingLogDropdownRemoveWithPrimaryButton(dropper) {
  * @param {HTMLButtonElement} button Adds click listener to the given reading log button.
  * @param {HTMLAElement} An anchor element item that expands the dropper.
  * @param {string} A text string with the initial text value of primaryButton
- * @param {HTMLDivElement} A div containing the dropper widget
  */
-function togglePrimaryButton(primaryButton, dropClick, initialText, dropper) {
+function togglePrimaryButton(primaryButton, dropClick, initialText) {
     const actionInput = primaryButton.parentElement.querySelector('input[name=action]')
     // Toggle checkmark
     primaryButton.children[0].classList.toggle('hidden')
@@ -288,11 +284,6 @@ function togglePrimaryButton(primaryButton, dropClick, initialText, dropper) {
     actionInput.value = (actionInput.value === 'add') ? 'remove' : 'add'
 
     primaryButton.children[1].innerText = initialText
-
-    // Close dropper if expanded:
-    if ($(dropper).find('.arrow').first().hasClass('up')) {
-        toggleDropper(dropper)
-    }
 }
 
 /**
@@ -309,6 +300,7 @@ function addReadingLogButtonClickListener(button) {
         const form = button.parentElement
         const actionInput = form.querySelector('input[name=action]')
         const dropper = button.closest('.widget-add')
+        const readingLogForm = dropper.querySelector('.readingLog')
         const primaryButton = dropper.querySelector('.want-to-read')
         const initialText = primaryButton.children[1].innerText
         const dropClick = dropper.querySelector('.dropclick')
@@ -343,15 +335,12 @@ function addReadingLogButtonClickListener(button) {
             }
             if (button.classList.contains('want-to-read')) {  // Primary button pressed
                 togglePrimaryButton(primaryButton, dropClick, initialText, dropper)
-                syncReadingLogDropdownRemoveWithPrimaryButton(dropper)
+                syncReadingLogDropdownRemoveWithPrimaryButton(dropper, readingLogForm)
             } else if (button.classList.contains('remove-from-list')) { // Clicking 'remove from list' (i.e. toggling a boofshelf) from the dropper.
-                toggleDropper(dropper)
                 togglePrimaryButton(primaryButton, dropClick, initialText, dropper)
-                syncReadingLogDropdownRemoveWithPrimaryButton(dropper)
+                syncReadingLogDropdownRemoveWithPrimaryButton(dropper, readingLogForm)
 
             } else {  // Secondary button pressed -- all other drop down items.
-                toggleDropper(dropper)
-
                 // Change primary button's text to new value:
                 primaryButton.children[1].innerText = button.innerText
 
@@ -378,7 +367,7 @@ function addReadingLogButtonClickListener(button) {
                 }
                 button.classList.add('hidden')
 
-                syncReadingLogDropdownRemoveWithPrimaryButton(dropper)
+                syncReadingLogDropdownRemoveWithPrimaryButton(dropper, readingLogForm)
             }
         }
 
@@ -496,7 +485,7 @@ function addRemoveClickListener(elem) {
  * @returns {HTMLParagraphElement} The newly created add-to-list link.
  */
 function updateDropperList(listKey, listTitle, coverUrl) {
-    const itemMarkUp = `<a href="${listKey}" class="add-to-list" data-list-cover-url="${coverUrl}" data-list-key="${listKey}">${listTitle}</a>`
+    const itemMarkUp = `<a href="${listKey}" class="add-to-list dropper__close" data-list-cover-url="${coverUrl}" data-list-key="${listKey}">${listTitle}</a>`
 
     const p = document.createElement('p')
     p.classList.add('list')
@@ -649,7 +638,7 @@ function replaceLoadingIndicators(dropperLists, activeLists, partials) {
 /**
  * Removes all child elements from each given element
  *
- * @param {HTMLElement} elem The element that we are removing children from
+ * @param {Array<HTMLElement>} elements The elements that we are removing children from
  */
 function removeChildren(...elements) {
     for (const elem of elements) {

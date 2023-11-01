@@ -64,6 +64,7 @@ class subjects(delegate.page):
             key,
             details=True,
             filters={'public_scan_b': 'false', 'lending_edition_s': '*'},
+            sort=web.input(sort='readinglog').sort,
         )
 
         delegate.context.setdefault('cssfile', 'subject')
@@ -353,6 +354,18 @@ class SubjectEngine:
                     subject.name = s.name
                     subject[meta.key].pop(i)
                     break
+
+            q = {"type": "/type/tag", "name": subject.name, "tag_type": "subject"}
+            match = web.ctx.site.things(q)
+            if match:
+                tag = web.ctx.site.get(match[0])
+                match = {
+                    'name': tag.name,
+                    'id': tag.key,
+                    'description': tag.tag_description,
+                    'plugins': tag.tag_plugins,
+                }
+                subject.tag = match
 
         return subject
 

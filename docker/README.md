@@ -60,7 +60,7 @@ Please use [Docker Desktop >= 4.3.0](https://docs.docker.com/desktop/mac/release
 If you are experiencing issues building JS, you may need to increase the RAM available to Docker. The defaults of 2GB ram and 1GB Swap are not enough. We recommend requirements of 4GB ram and 2GB swap. This resolved the error message of `Killed` when running `build-assets`.
 
 ### For All Users
-All commands are from the project root directory, where `docker-compose.yml` is (i.e. `path/to/your/forked/and/cloned/openlibrary`):
+All commands are from the project root directory, where `compose.yaml` is (i.e. `path/to/your/forked/and/cloned/openlibrary`):
 
 #### Build the images
 ```
@@ -192,8 +192,10 @@ docker compose down
 # This can take from a few minutes to more than 20 on older hardware.
 docker compose build --pull --no-cache
 
-# Remove any old containers; if you use docker for something special, and have containers you don't want to lose, be careful with this. But you likely don't :)
-docker container prune
+# Remove any old containers/images
+# If you use docker for other things, and have containers/images you don't want to lose, be careful with this. But you likely don't :)
+docker container prune --filter label="com.docker.compose.project=openlibrary" --force
+docker image prune --filter label="com.docker.compose.project=openlibrary" --force
 
 # Remove volumes that might have outdated dependencies/code
 docker volume rm openlibrary_ol-build openlibrary_ol-nodemodules openlibrary_ol-vendor
@@ -236,7 +238,7 @@ docker compose run --rm home make test
 # Run Open Library using a local copy of Infogami for development
 
 docker compose down && \
-    docker compose -f docker compose.yml -f docker compose.override.yml -f docker compose.infogami-local.yml up -d && \
+    docker compose -f compose.yaml -f compose.override.yaml -f compose.infogami-local.yaml up -d && \
     docker compose logs -f --tail=10 web
 
 # In your browser, navigate to http://localhost:8080

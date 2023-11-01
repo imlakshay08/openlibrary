@@ -3,6 +3,7 @@
 from datetime import datetime, timedelta
 import logging
 import web
+import json
 import requests
 from typing import Any
 from collections import defaultdict
@@ -24,7 +25,7 @@ from openlibrary.utils.isbn import to_isbn_13, isbn_13_to_isbn_10, canonical
 from openlibrary.core.vendors import create_edition_from_amazon_metadata
 
 # Seed might look unused, but removing it causes an error :/
-from openlibrary.core.lists.model import ListMixin, Seed  # noqa: F401
+from openlibrary.core.lists.model import ListMixin, Seed
 from . import cache, waitinglist
 
 import urllib
@@ -755,7 +756,7 @@ class User(Thing):
         # New users are now public by default for new patrons
         # As of 2020-05, OpenLibraryAccount.create will
         # explicitly set public_readlog: 'yes'.
-        # Legacy acconts w/ no public_readlog key
+        # Legacy accounts w/ no public_readlog key
         # will continue to default to 'no'
     }
 
@@ -802,14 +803,23 @@ class User(Thing):
             usergroup = '/usergroup/%s' % usergroup
         return usergroup in [g.key for g in self.usergroups]
 
+    def has_cookie(self, name):
+        return web.cookies().get(name, False)
+
     def is_printdisabled(self):
         return web.cookies().get('pd')
+
+    def is_screener_eligible(self):
+        return web.cookies().get('se')
 
     def is_admin(self):
         return self.is_usergroup_member('/usergroup/admin')
 
     def is_librarian(self):
         return self.is_usergroup_member('/usergroup/librarians')
+
+    def is_super_librarian(self):
+        return self.is_usergroup_member('/usergroup/super-librarians')
 
     def in_sponsorship_beta(self):
         return self.is_usergroup_member('/usergroup/sponsors')
@@ -1116,6 +1126,54 @@ class Subject(web.storage):
                 return Image(web.ctx.site, "b", cover_id)
 
 
+class Tag(Thing):
+    """Class to represent /type/tag objects in OL."""
+
+    def url(self, suffix="", **params):
+        return self.get_url(suffix, **params)
+
+    def get_url_suffix(self):
+        return self.name or "unnamed"
+
+    @classmethod
+    def find(cls, tag_name, tag_type):
+        """Returns a Tag object for a given tag name and tag type."""
+        q = {'type': '/type/tag', 'name': tag_name, 'tag_type': tag_type}
+        match = list(web.ctx.site.things(q))
+        return match[0] if match else None
+
+    @classmethod
+    def create(
+        cls,
+        tag_name,
+        tag_description,
+        tag_type,
+        tag_plugins,
+        ip='127.0.0.1',
+        comment='New Tag',
+    ):
+        """Creates a new Tag object."""
+        current_user = web.ctx.site.get_user()
+        patron = current_user.get_username() if current_user else 'ImportBot'
+        key = web.ctx.site.new_key('/type/tag')
+        from openlibrary.accounts import RunAs
+
+        with RunAs(patron):
+            web.ctx.ip = web.ctx.ip or ip
+            web.ctx.site.save(
+                {
+                    'key': key,
+                    'name': tag_name,
+                    'tag_description': tag_description,
+                    'tag_type': tag_type,
+                    'tag_plugins': json.loads(tag_plugins or "[]"),
+                    'type': {"key": '/type/tag'},
+                },
+                comment=comment,
+            )
+            return key
+
+
 @dataclass
 class LoggedBooksData:
     """
@@ -1164,6 +1222,7 @@ def register_models():
     client.register_thing_class('/type/user', User)
     client.register_thing_class('/type/list', List)
     client.register_thing_class('/type/usergroup', UserGroup)
+    client.register_thing_class('/type/tag', Tag)
 
 
 def register_types():
@@ -1174,6 +1233,7 @@ def register_types():
     types.register_type('^/books/[^/]*$', '/type/edition')
     types.register_type('^/works/[^/]*$', '/type/work')
     types.register_type('^/languages/[^/]*$', '/type/language')
+    types.register_type('^/tags/[^/]*$', '/type/tag')
 
     types.register_type('^/usergroup/[^/]*$', '/type/usergroup')
     types.register_type('^/permission/[^/]*$', '/type/permission')

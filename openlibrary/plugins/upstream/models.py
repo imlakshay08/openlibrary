@@ -2,12 +2,11 @@ import logging
 import re
 from functools import cached_property
 
-import requests
 import sys
 import web
 
 from collections import defaultdict
-from isbnlib import canonical
+from isbnlib import canonical, mask, NotValidISBNError
 
 from infogami import config
 from infogami.infobase import client
@@ -80,7 +79,7 @@ class Edition(models.Edition):
             return self.get_ia_cover(self.ocaid, size)
 
     def get_ia_cover(self, itemid, size):
-        image_sizes = dict(S=(116, 58), M=(180, 360), L=(500, 500))
+        image_sizes = {"S": (116, 58), "M": (180, 360), "L": (500, 500)}
         w, h = image_sizes[size.upper()]
         return f"https://archive.org/download/{itemid}/page/cover_w{w}_h{h}.jpg"
 
@@ -103,6 +102,15 @@ class Edition(models.Edition):
             isbn_10 = self.isbn_10 and self.isbn_10[0]
             return isbn_10 and isbn_10_to_isbn_13(isbn_10)
         return isbn_13
+
+    def get_isbnmask(self):
+        """Returns a masked (hyphenated) ISBN if possible."""
+        isbns = self.get('isbn_13', []) + self.get('isbn_10', [None])
+        try:
+            isbn = mask(isbns[0])
+        except NotValidISBNError:
+            return isbns[0]
+        return isbn or isbns[0]
 
     def get_identifiers(self):
         """Returns (name, value) pairs of all available identifiers."""
@@ -323,7 +331,9 @@ class Edition(models.Edition):
             name, value = id['name'], id['value']
             if name == 'lccn':
                 value = normalize_lccn(value)
-            d.setdefault(name, []).append(value)
+            # `None` in this field causes errors. See #7999.
+            if value is not None:
+                d.setdefault(name, []).append(value)
 
         # clear existing value first
         for name in names:
@@ -390,7 +400,7 @@ class Edition(models.Edition):
 
     def get_toc_text(self):
         def format_row(r):
-            return "*" * r.level + " " + " | ".join([r.label, r.title, r.pagenum])
+            return f"{'*' * r.level} {r.label} | {r.title} | {r.pagenum}"
 
         return "\n".join(format_row(r) for r in self.get_table_of_contents())
 
@@ -437,10 +447,9 @@ class Edition(models.Edition):
         if len(authors) == 1:
             citation['author'] = authors[0].name
         else:
-            for i, a in enumerate(authors):
-                citation['author%s' % (i + 1)] = a.name
+            for i, a in enumerate(authors, 1):
+                citation[f'author{i}'] = a.name
 
-        isbns = self.get('isbn_13', []) + self.get('isbn_10', [None])
         citation.update(
             {
                 'date': self.get('publish_date'),
@@ -451,13 +460,13 @@ class Edition(models.Edition):
                 else None,
                 'publication-place': self.get('publish_places', [None])[0],
                 'publisher': self.get('publishers', [None])[0],
-                'isbn': isbns[0],
+                'isbn': self.get_isbnmask(),
                 'issn': self.get('identifiers', {}).get('issn', [None])[0],
             }
         )
 
-        if self.lccn:
-            citation['lccn'] = normalize_lccn(self.lccn[0])
+        if self.lccn and (lccn := normalize_lccn(self.lccn[0])):
+            citation['lccn'] = lccn
         if self.get('oclc_numbers'):
             citation['oclc'] = self.oclc_numbers[0]
         citation['ol'] = str(self.get_olid())[2:]
@@ -502,7 +511,7 @@ class Author(models.Author):
     def get_books(self, q=''):
         i = web.input(sort='editions', page=1, rows=20, mode="")
         try:
-            # safegaurd from passing zero/negative offsets to solr
+            # safeguard from passing zero/negative offsets to solr
             page = max(1, int(i.page))
         except ValueError:
             page = 1
@@ -687,9 +696,8 @@ class Work(models.Work):
         """
         work_id = self.key.replace('/works/', '')
         availability = lending.get_work_availability(work_id)
-        if work_id in availability:
-            if 'openlibrary_edition' in availability[work_id]:
-                return '/books/%s' % availability[work_id]['openlibrary_edition']
+        if ol_edition := availability.get(work_id, {}).get('openlibrary_edition'):
+            return f'/books/{ol_edition}'
 
         return None
 
@@ -831,6 +839,9 @@ class User(models.User):
         loans = lending.get_loans_of_user(self.key)
         for loan in loans:
             lending.sync_loan(loan['ocaid'])
+
+    def get_safe_mode(self):
+        return (self.get_users_settings() or {}).get('safe_mode', "").lower()
 
 
 class UnitParser:
@@ -1004,6 +1015,12 @@ class ListChangeset(Changeset):
         return models.Seed(self.get_list(), seed)
 
 
+class Tag(models.Tag):
+    """Class to represent /type/tag objects in Open Library."""
+
+    pass
+
+
 def setup():
     models.register_models()
 
@@ -1015,6 +1032,7 @@ def setup():
     client.register_thing_class('/type/place', SubjectPlace)
     client.register_thing_class('/type/person', SubjectPerson)
     client.register_thing_class('/type/user', User)
+    client.register_thing_class('/type/tag', Tag)
 
     client.register_changeset_class(None, Changeset)  # set the default class
     client.register_changeset_class('merge-authors', MergeAuthors)

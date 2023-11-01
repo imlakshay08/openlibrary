@@ -1,6 +1,7 @@
 // @ts-check
 import $ from 'jquery';
 import { move_to_work, move_to_author } from '../ol.js';
+import { renderBulkTaggingMenu } from '../subject.js';
 import './SelectionManager.less';
 
 /**
@@ -82,8 +83,10 @@ export default class SelectionManager {
      * @param {MouseEvent & { currentTarget: HTMLElement }} clickEvent
      */
     toggleSelected(clickEvent) {
-        // If there is text selection, dont do anything
-        if (window.getSelection()?.toString() !== '') return;
+        // If there is text selection or the click is on a link that isn't a select handle, don't do anything
+        if (window.getSelection()?.toString() !== '' ||
+            ($(clickEvent.target).closest('a').is('a') &&
+            $(clickEvent.target).not('.ile-select-handle').length > 0)) return;
 
         const el = clickEvent.currentTarget;
         const isCurSelected = el.classList.contains('ile-selected');
@@ -119,6 +122,7 @@ export default class SelectionManager {
         const statusParts = [];
         this.ile.$actions.empty();
         this.ile.$selectionActions.empty();
+        this.ile.$hiddenForms.css('display', 'none');
         SelectionManager.TYPES.forEach(type => {
             const count = this.selectedItems[type.singular].length;
             if (count) statusParts.push(`${count} ${count === 1 ? type.singular : type.plural}`);
@@ -136,7 +140,11 @@ export default class SelectionManager {
             if (action.requires_type.every(type => this.selectedItems[type].length > 0)) {
                 action.applies_to_type.forEach(type => items.push(...this.selectedItems[type]));
                 if (action.multiple_only ? items.length > 1 : items.length > 0)
-                    this.ile.$actions.append($(`<a target="_blank" href="${action.href(this.getOlidsFromSelectionList(items))}">${action.name}</a>`));
+                    if (action.href) {
+                        this.ile.$actions.append($(`<a target="_blank" href="${action.href(this.getOlidsFromSelectionList(items))}">${action.name}</a>`));
+                    } else if (action.onclick && action.name === 'Tag Works') {
+                        this.ile.$actions.append($(`<a id="tag_multiple_works">${action.name}</a>`).on('click', () => action.onclick(this.getOlidsFromSelectionList(items))));
+                    }
             }
         }
     }
@@ -381,6 +389,13 @@ SelectionManager.SELECTION_PROVIDERS = [
  * Actions get enabled when a certain selections are made.
  */
 SelectionManager.ACTIONS = [
+    {
+        applies_to_type: ['work','edition'],
+        requires_type: ['work'],
+        multiple_only: true,
+        name: 'Tag Works',
+        onclick: olids => renderBulkTaggingMenu(olids),
+    },
     {
         applies_to_type: ['work','edition'],
         requires_type: ['work'],
